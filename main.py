@@ -1,26 +1,7 @@
 from datetime import datetime, time
-
-workouts = [
-    'Kb snatch',
-    'Heavy kb swings + pistol squats superset',
-    'Neutral-grip archer pullups + dips',
-    'Light swings + split-squats superset',
-    'Light pull + burpees superset',
-    'Kb snatch',
-    'Heavy kb swings + stair climbs superset',
-    'Weighted pullups + heavy kb oh press',
-    'Light swings + burpees superset',
-    'Light pull + light kb oh press superset',
-]
-
-# days: which days of the week does the task show up, empty list means every day
-# duration: expected time to complete in minutes
-# impact: how important it is. 1 = low importance, 3 = high importance
-# urgency: how soon it needs to be done. same scale as impact, tasks with a time become high urgency at that time
-regular_tasks = {
-    'get ready for work': {'days': [0, 1, 2, 6], 'duration': 60, 'impact': 3, 'urgency': time(12)},
-    'Check emails': {'days': [], 'duration': 10, 'impact': 2, 'urgency': 2},
-}
+import json
+from pathlib import Path
+from pprint import pprint
 
 # TODO I should use the data from the tasks dictionary to create task objects that have other properties like 'completed'
 #  and 'deferred' etc
@@ -28,18 +9,68 @@ regular_tasks = {
 # TODO i could have an 'optional' property for certain recurring tasks, so that the initial dialogue can ask me 'do you
 #  need to do X today?' and give me the option to defer or skip
 
+now = datetime.now()
+LISTS = {
+    'regular': Path("./lists/regular1.json"),
+    'workouts': Path("./lists/workouts.json")
+}
+
+def load_json(list_name: str) -> dict:
+    # load regular tasks list from file, create file if it doesn't exist
+    list_path = LISTS[list_name]
+    if not list_path.exists():
+        task_list = {}
+    with open(list_path) as f:
+        task_list = json.load(f)
+
+    # pprint(regular_tasks)
+    return task_list
+
+def collate_regular(now: datetime) -> list[str]:
+    """
+    days: which days of the week does the task show up, empty list means every day
+    duration: expected time to complete in minutes
+    impact: how important it is. 1 = low importance, 3 = high importance
+    urgency: how soon it needs to be done. same scale as impact, tasks with a time become high urgency at that time
+
+    :param now:
+    :return : list of today's regular tasks
+    """
+
+    regular_tasks = load_json('regular')
+
+    todays_regular = []
+    for task in regular_tasks:
+        if isinstance(regular_tasks[task]['urgency'], str):
+            h, m = regular_tasks[task]['urgency'].split(' ')
+            regular_tasks[task]['urgency'] = time(int(h), int(m))
+        if (not regular_tasks[task]['days']) or (now.weekday() in regular_tasks[task]['days']):
+            todays_regular.append(task)
+
+    return todays_regular
+
+def save_regular():
+    regular_path = LISTS['regular_path']
+    if not regular_path.exists():
+        regular_path.parent.mkdir(parents=True, exist_ok=True)
+        regular_path.touch(exist_ok=True)
+
+# import lists
+workouts = load_json('workouts')
+regular = collate_regular(now)
+
 count = 0
 while True:
-    now = datetime.now()
     count += 1
     response = input("\nReady for the day?")
     if response == 'n':
         break
     print(f"\n{now.date()} Today's List")
-    for task in regular_tasks:
-        if (not regular_tasks[task]['days']) or (now.weekday() in regular_tasks[task]['days']):
-            print(f"- {task}")
 
-    todays_workout = workouts[count % len(workouts)]
-    print(f"- {todays_workout}")
+    for task in regular:
+        print(f"- {task}")
+
+    print(f"- workout")
+    print("  Essentials")
+    print(f"  {workouts[count % len(workouts)]}")
 
