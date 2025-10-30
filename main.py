@@ -3,25 +3,24 @@ import json
 from pathlib import Path
 from pprint import pprint
 
-# TODO I should use the data from the tasks dictionary to create task objects that have other properties like 'completed'
-#  and 'deferred' etc
-
 # TODO i could have an 'optional' property for certain recurring tasks, so that the initial dialogue can ask me 'do you
 #  need to do X today?' and give me the option to defer or skip
 
 now = datetime.now()
 LISTS = {
-    'regular': Path("./lists/regular1.json"),
-    'workouts': Path("./lists/workouts.json")
+    'regular': Path("data/regular1.json"),
+    'workouts': Path("data/workouts.json"),
+    'workout_count': Path("data/workout_count.json")
 }
 
 def load_json(list_name: str) -> dict:
     # load regular tasks list from file, create file if it doesn't exist
     list_path = LISTS[list_name]
-    if not list_path.exists():
+    if list_path.exists():
+        with open(list_path, 'r') as f:
+            task_list = json.load(f)
+    else:
         task_list = {}
-    with open(list_path) as f:
-        task_list = json.load(f)
 
     # pprint(regular_tasks)
     return task_list
@@ -55,8 +54,37 @@ def save_regular():
         regular_path.parent.mkdir(parents=True, exist_ok=True)
         regular_path.touch(exist_ok=True)
 
-# import lists
-workouts = load_json('workouts')
+def increment_workout():
+    with open(LISTS['workout_count'], 'r') as f:
+        count_dict = json.load(f)
+
+    # get counter
+    number = count_dict['count']
+
+    # create a number that counts up days
+    today = (2025 * 365) + now.timetuple().tm_yday
+
+    # compare day number to make sure this is a new day
+    if today > count_dict['day']:
+        count_dict['count'] += 1
+        count_dict['day'] = today
+
+    with open(LISTS['workout_count'], 'w') as f:
+        json.dump(count_dict, f)
+
+    return number
+
+def load_workouts():
+    workouts = load_json('workouts')
+    wo_list = list(workouts.keys())
+
+    # pprint(workouts)
+
+    counter = increment_workout()
+    return wo_list[counter % len(wo_list)]
+
+# import data
+workout = load_workouts()
 regular = collate_regular(now)
 
 count = 0
@@ -72,5 +100,5 @@ while True:
 
     print(f"- workout")
     print("  Essentials")
-    print(f"  {workouts[count % len(workouts)]}")
+    print(f"  {workout}")
 
