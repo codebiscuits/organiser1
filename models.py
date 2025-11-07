@@ -1,26 +1,39 @@
 from datetime import datetime
 
 class Task():
-    def __init__(self, name, description, duration, completed, urgency, impact, deadline):
-        self.name = name
-        self.description = description
-        self.duration = duration
-        self.completed = completed
-        self.urgency = urgency
-        self.impact = impact
-        self.deadline = deadline
+    def __init__(self, name, description, duration, urgency, impact, date_is, date_for):
+        self.name: str = name
+        self.description: str = description
+        self.duration: int = duration
+        self.completed: bool = False
+        self.date_is: datetime | None = date_is
+        self.date_for: str | None = date_for
+        self.deferred: bool = False
+        self.impact: int = impact
+        self.urgency: int = urgency
+        self.priority: int = self.impact * self.urgency
 
+    # This will make it easy to identify duplicate tasks, even if they aren't completely identical
+    def __eq__(self, other):
+        return (self.name == other.name) and (self.date_is == other.date_is)
 
-class Live_List():
-    def __init__(self):
-        self.live_list = []
+    # These are implemented so that I can easily sort a list of tasks by priority
+    def __gt__(self, other):
+        return self.priority > other.priority
+    def __gte__(self, other):
+        return self.priority >= other.priority
+    def __lt__(self, other):
+        return self.priority < other.priority
+    def __lte__(self, other):
+        return self.priority <= other.priority
 
-    def add_task(self):
-        name = input("Enter task name: ")
-        description = input("Enter task description: ")
-        duration = input("Enter task duration: ")
-        urgency = input("Enter task urgency: ")
-        impact = input("Enter task impact: ")
-        deadline = input("Enter task deadline (optional): ")
+    def __str__(self):
+        return self.name
 
-        self.live_list.append(Task(name, description, duration, False, urgency, impact, deadline))
+    def __repr__(self):
+        if self.date_is:
+            return (f"{self.name}\n{self.description}\n{self.duration}\n{self.completed}\n{self.date_is}"
+                    f"\n{self.date_for}\n{self.deferred}\n{self.impact}\n{self.urgency}\n{self.priority}")
+        else:
+            return (f"{self.name}\n{self.description}\n{self.duration}\n{self.completed}"
+                    f"\n{self.deferred}\n{self.impact}\n{self.urgency}\n{self.priority}")

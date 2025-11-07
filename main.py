@@ -1,104 +1,259 @@
-from datetime import datetime, time
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
+import click
 from pprint import pprint
+from models import Task
 
-# TODO i could have an 'optional' property for certain recurring tasks, so that the initial dialogue can ask me 'do you
+# TODO i could have the option to skip recurring tasks, so that the initial dialogue can ask me 'do you
 #  need to do X today?' and give me the option to defer or skip
 
-now = datetime.now()
-LISTS = {
-    'regular': Path("data/regular1.json"),
-    'workouts': Path("data/workouts.json"),
-    'workout_count': Path("data/workout_count.json")
-}
 
-def load_json(list_name: str) -> dict:
+# def collate_recurring(now: datetime) -> list[str]:
+#     """
+#     days: which days of the week does the task show up, empty list means every day
+#     duration: expected time to complete in minutes
+#     impact: how important it is. 1 = low importance, 3 = high importance
+#     urgency: how soon it needs to be done. same scale as impact, tasks with a time become high urgency at that time
+#
+#     :param now:
+#     :return : list of today's regular tasks
+#     """
+#
+#     recurring_tasks = load_json('regular')
+#
+#     todays_recurring = []
+#     for task in recurring_tasks:
+#         if isinstance(recurring_tasks[task]['urgency'], str):
+#             h, m = recurring_tasks[task]['urgency'].split(' ')
+#             recurring_tasks[task]['urgency'] = time(int(h), int(m))
+#         if (not recurring_tasks[task]['days']) or (now.weekday() in recurring_tasks[task]['days']):
+#             todays_recurring.append(task)
+#
+#     return todays_recurring
+#
+# def save_recurring():
+#     recurring_path = LIST_PATHS['recurring']
+#     if not recurring_path.exists():
+#         recurring_path.parent.mkdir(parents=True, exist_ok=True)
+#         recurring_path.touch(exist_ok=True)
+#
+# def increment_workout():
+#     """There needs to be a function that cycles through the workouts list, but i don't want it to increment on days that
+#     i don't open the app, and i also don't want it to increment more than once on days that i open the app more than
+#     once, so i need a counter that prevents both of those possibilities.
+#     To prevent multiple incerements per day, this function calculates the number of days since 0/0/00 and keeps a record
+#     of the last day number that the app was opened, and only increments if the day number has changed.
+#     To prevent incrementing on days that the app isn't used, there is another count thast it uses to choose the workout
+#     which is only incremented when the app is opened and the day number has changed since last time."""
+#
+#     # TODO i also need to be able to defer the workout if it is not marked complete, this would require not incrementing
+#     #  the count. Perhaps i could start by checking if there is a workout in the list of tasks carried over from
+#     #  yesterday, and if there is, don't increment, just return yesterday's number
+#
+#     with open(LIST_PATHS['workout_count'], 'r') as f:
+#         count_dict = json.load(f)
+#
+#     # get counter
+#     number = count_dict['count']
+#
+#     # create a number that counts up days
+#     today = (2025 * 365) + now.timetuple().tm_yday
+#     # compare day number to make sure this is a new day
+#     if today > count_dict['day']:
+#         count_dict['count'] += 1
+#         count_dict['day'] = today
+#
+#     with open(LIST_PATHS['workout_count'], 'w') as f:
+#         json.dump(count_dict, f)
+#
+#     return number
+#
+# def load_workouts():
+#     workouts = load_json('workouts')
+#     wo_list = list(workouts.keys())
+#
+#     # pprint(workouts)
+#
+#     counter = increment_workout()
+#     return wo_list[counter % len(wo_list)]
+
+#####################################################################
+
+# TODO function to load lists
+def load_json(list_path: Path) -> list:
     # load regular tasks list from file, create file if it doesn't exist
-    list_path = LISTS[list_name]
     if list_path.exists():
         with open(list_path, 'r') as f:
             task_list = json.load(f)
     else:
-        task_list = {}
+        task_list = []
 
     # pprint(regular_tasks)
     return task_list
 
-def collate_regular(now: datetime) -> list[str]:
-    """
-    days: which days of the week does the task show up, empty list means every day
-    duration: expected time to complete in minutes
-    impact: how important it is. 1 = low importance, 3 = high importance
-    urgency: how soon it needs to be done. same scale as impact, tasks with a time become high urgency at that time
+# TODO function to serialise tasks
+def serialise_task(task: Task) -> dict:
+    """Takes a Task object and turns it into a dictionary for saving as JSON.
+    Translates datetime object into ISO format"""
 
-    :param now:
-    :return : list of today's regular tasks
-    """
+    return {
+        "name": task.name,
+        "description": task.description,
+        "duration": task.duration,
+        "completed": task.completed,
+        "date_is": task.date_is.isoformat() or None,
+        "date_for": task.date_for,
+        "deferred": task.deferred,
+        "impact": task.impact,
+        "urgency": task.urgency,
+        "priority": task.priority,
+    }
 
-    regular_tasks = load_json('regular')
+# TODO function to deserialise tasks
+def deserialise_task(task: dict) -> Task:
+    """Takes a serialised task dictionary, recalculates urgency if required, then instantiates
+    a new Task object with the appropriate attributes, and updates completed, deferred and priority
+    to ensure their values are preserved"""
 
-    todays_regular = []
-    for task in regular_tasks:
-        if isinstance(regular_tasks[task]['urgency'], str):
-            h, m = regular_tasks[task]['urgency'].split(' ')
-            regular_tasks[task]['urgency'] = time(int(h), int(m))
-        if (not regular_tasks[task]['days']) or (now.weekday() in regular_tasks[task]['days']):
-            todays_regular.append(task)
+    if task["date_is"]:
+        new_date = datetime.fromisoformat(task["date_is"])
+        urgency = calculate_urgency(new_date, task["duration"])
+    else:
+        new_date = None
+        urgency = task["urgency"]
 
-    return todays_regular
+    new_task = Task(
+        name=task["name"],
+        description=task["description"],
+        duration=task["duration"],
+        date_is=new_date,
+        date_for=task["date_for"],
+        impact=task["impact"],
+        urgency=urgency
+    )
 
-def save_regular():
-    regular_path = LISTS['regular_path']
-    if not regular_path.exists():
-        regular_path.parent.mkdir(parents=True, exist_ok=True)
-        regular_path.touch(exist_ok=True)
+    new_task.completed = task["completed"]
+    new_task.deferred = task["deferred"]
+    new_task.priority = task["impact"] * urgency
 
-def increment_workout():
-    with open(LISTS['workout_count'], 'r') as f:
-        count_dict = json.load(f)
+    return new_task
 
-    # get counter
-    number = count_dict['count']
+# TODO function to serialise whole list
+def serialise_list(task_list: list[Task]) -> list[dict]:
+    return [serialise_task(t) for t in task_list]
 
-    # create a number that counts up days
-    today = (2025 * 365) + now.timetuple().tm_yday
+# TODO function to deserialise whole list
+def deserialise_list(task_list: list[dict]) -> list[Task]:
+    return [deserialise_task(t) for t in task_list]
 
-    # compare day number to make sure this is a new day
-    if today > count_dict['day']:
-        count_dict['count'] += 1
-        count_dict['day'] = today
+# TODO function to save lists
+def save_json(list_name: str, serialised_list: list) -> None:
+    list_path = lists[list_name]['path']
+    with open(list_path, 'w') as f:
+        json.dump(serialised_list, f)
+    print(f"{list_name} saved successfuly")
 
-    with open(LISTS['workout_count'], 'w') as f:
-        json.dump(count_dict, f)
+# TODO function to create a new task
+def calculate_urgency(date_is, duration) -> int:
+    now = datetime.now()
+    free_hours_per_day = 3 # very rough estimate of how much time i have for working through tasks
+    days_until_deadline = (date_is - now).days
+    free_hours = days_until_deadline * free_hours_per_day
+    duration_multiple = free_hours / (duration / 60)
 
-    return number
+    if duration_multiple <5:
+        return 3
+    elif duration_multiple < 10:
+        return 2
+    else:
+        return 1
 
-def load_workouts():
-    workouts = load_json('workouts')
-    wo_list = list(workouts.keys())
+def add_task(list_name: str) -> Task|None:
+    if list_name not in lists.keys():
+        print(f"Invalid task list, must be one of: {[lists.keys()]}")
+        return
 
-    # pprint(workouts)
+    name: str = input("Enter task name: ")
+    description: str = input("Enter task description: ")
+    duration: int = int(input("Enter task duration in minutes: "))
+    impact: int = int(input("Enter task impact (1-3): "))
+    date_is = input("Enter task time as 'yy/mm/dd hh:mm' (optional): ") or None
+    if date_is:
+        date_is = datetime.strptime(date_is, "%y/%m/%d %H:%M")
+        date_for = input("For deadline, enter 'd', for appointment, enter 'a' (optional): ")
+        urgency: int = calculate_urgency(date_is, duration)
+    else:
+        date_for = None
+        urgency: int = int(input("Enter task urgency (1-3): "))
 
-    counter = increment_workout()
-    return wo_list[counter % len(wo_list)]
+    lists[list_name]['list'].append(Task(name, description, duration, urgency, impact, date_is, date_for))
 
-# import data
-workout = load_workouts()
-regular = collate_regular(now)
+# TODO function to create a new list
+def create_list(list_name: str) -> list:
+    global lists
+    list_path = Path(f"data/{list_name}.json")
 
-count = 0
-while True:
-    count += 1
-    response = input("\nReady for the day?")
-    if response == 'n':
-        break
-    print(f"\n{now.date()} Today's List")
+    if list_path.exists():
+        print("List already exists")
+    else:
+        lists[list_name]["path"] = list_path
+        lists[list_name]["list"] = []
 
-    for task in regular:
-        print(f"- {task}")
+    # TODO function to manage loading and preparing all lists
 
-    print(f"- workout")
-    print("  Essentials")
-    print(f"  {workout}")
+def load_all_lists(list_names) -> dict[str: dict]:
+    all_lists = {}
+
+    for list_name in list_names:
+        all_lists[list_name] = {}
+        all_lists[list_name]['path'] = Path(f"data/{list_name}.json")
+        this_list = load_json(all_lists[list_name]['path'])
+        all_lists[list_name]['list'] = deserialise_list(this_list)
+
+    return all_lists
+
+    # TODO function to back up all lists to json before a risky operation
+
+def save_list(list_name: str) -> None:
+    serialised_list = serialise_list(lists[list_name]['list'])
+    save_json(list_name, serialised_list)
+
+def save_all_lists() -> None:
+    for list in lists:
+        save_list(list)
+
+# TODO function to set task as complete
+
+# TODO function to set task as deferred
+
+# TODO function to compile 'today' list
+
+# now = datetime.now()
+
+list_names = [
+    "today",
+    "defer",
+    "mandatory",
+    "workouts",
+    "recurring",
+    "housework",
+    "appointments",
+    "deadlines",
+    "one_offs",
+    "completed",
+]
+
+lists = load_all_lists(list_names)
+
+# add_task("today")
+# save_list("today")
+
+for list_name in lists.keys():
+    if lists[list_name]['list']:
+        print(list_name)
+        print([str(l) for l in lists[list_name]['list']])
+
+        print([l for l in lists[list_name]['list']])
+
 
