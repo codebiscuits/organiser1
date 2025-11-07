@@ -1,9 +1,10 @@
 from datetime import datetime
 
 class Task():
-    def __init__(self, name, description, duration, urgency, impact, date_is, date_for):
+    def __init__(self, name, description, mandatory, duration, urgency, impact, date_is, date_for):
         self.name: str = name
         self.description: str = description
+        self.mandatory: bool = mandatory
         self.duration: int = duration
         self.completed: bool = False
         self.date_is: datetime | None = date_is
